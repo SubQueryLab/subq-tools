@@ -1,5 +1,3 @@
-import { ORIGIN } from '$env/static/private'
-
 export interface YandexLoggedEvent {
 	targetId: string // tid
 	clientId: string // cid
