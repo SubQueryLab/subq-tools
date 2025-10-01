@@ -1,6 +1,6 @@
 {
   "name": "@subq/tools",
-  "version": "0.0.1-beta.1",
+  "version": "0.0.1-beta.2",
   "description": "A starter for creating a TypeScript package.",
   "type": "module",
   "license": "MIT",
