@@ -6,6 +6,7 @@ export default defineConfig([
       "./src/index.ts",
       "./src/analytics/index.ts",
       "./src/vault/index.ts",
+      "./src/vault/cli.ts",
     ],
     platform: "neutral",
     dts: true,
