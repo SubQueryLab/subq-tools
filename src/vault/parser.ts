@@ -100,7 +100,7 @@ export function parseConnectionString(
     process.exit(1);
   }
 
-  const host = `${url.protocol}//${url.host}/v1`;
+  const host = `${url.protocol}//${url.host}`;
   const username = decodeURIComponent(url.username);
   const password = decodeURIComponent(url.password);
   const scopes: Record<string, Scope> = {};

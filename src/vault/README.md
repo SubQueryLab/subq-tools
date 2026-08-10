@@ -236,20 +236,42 @@ const config = getConfigWithFallback("custom.config.yaml");
 
 ## CLI: `sq-inject`
 
-Модуль включает CLI-утилиту для инжекта секретов из Vault в `process.env`:
+Модуль включает CLI-утилиту для инжекта секретов из Vault в дочерние процессы:
 
 ```bash
-npx sq-inject
+npx sq-inject in <команда>
 ```
 
-Работает по тому же приоритету: сначала `VAULT_SECRETS_URL`, затем `secrets.config.yaml`.
+Команда запускается с уже инжектированными секретами в `env`. Все дочерние процессы (включая цепочки `&&`, `||`, пайпы `|`) наследуют переменные окружения.
+
+### Примеры
+
+**Простая команда:**
+
+```bash
+npx sq-inject in npx prisma generate
+```
+
+**Цепочка команд (`&&`, `||`):**
+
+```bash
+npx sq-inject in npx prisma@7.1.0 generate && cross-env NODE_OPTIONS="--max-old-space-size=8192" NODE_ENV=dev vite dev --port=8080
+```
+
+**Пайп:**
+
+```bash
+npx sq-inject in cat .env | grep API_KEY
+```
+
+> При наличии shell-операторов (`&&`, `||`, `|`, `;`, `>`, `>>`, `<`, `<<`) sq-inject автоматически запускает команду через системный shell, поэтому вся цепочка выполняется в едином окружении с секретами.
 
 ### Как это работает
 
 1. Загружает `.env` файл (если есть)
 2. Определяет конфиг (`VAULT_SECRETS_URL` → fallback на YAML)
 3. Подключается к Vault и получает токен
-4. Читает скоупы с `target: runtime`
-5. Инжектит их в `process.env` через `dotenv.populate`
-
-> Скоупы без `target: runtime` игнорируются при инжекте.
+4. Читает все скоупы
+5. Сливает секреты в единый `env`-объект
+6. Запускает переданную команду с прокинутым `env` через `execa`
+7. Передаёт вывод, сигналы (`SIGINT`, `SIGTERM`) и exit code родительскому процессу

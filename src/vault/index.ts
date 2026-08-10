@@ -67,9 +67,10 @@ export class Vault {
     console.info(
       c.blueBright("🔐 Initializing connection to Vault:", this.config.host),
     );
+    const baseUrl =  this.config.host.endsWith('/v1') ? this.config.host : new URL('/v1', this.config.host).href
     const vault = new VaultInstance({
       https: false,
-      baseUrl: this.config.host,
+      baseUrl,
       timeout: 10000,
     });
 

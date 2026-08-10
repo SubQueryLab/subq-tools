@@ -4,12 +4,14 @@ import yargs from "yargs";
 import c from "chalk";
 import path from "path";
 
-import { execa } from "execa";
+import execa from "execa";
 import which from "which";
 
 import { Vault } from "./index.js";
 
 // FROM https://github.com/dotenvx/dotenvx/blob/main/src/lib/helpers/executeCommand.js
+const SHELL_OPERATORS = ["&&", "||", "|", ";", ">", ">>", "<", "<<"];
+
 async function executeCommand(
   commandArgs: string[],
   env: Record<string, string>,
@@ -27,55 +29,46 @@ async function executeCommand(
     "SIGUSR2",
   ];
 
-  let commandProcess;
+  const useShell = commandArgs.some((arg) => SHELL_OPERATORS.includes(arg));
+
+  let commandProcess: any;
   const sigintHandler = () => {
     if (commandProcess) {
-      commandProcess.kill("SIGINT"); // Send SIGINT to the command process
+      commandProcess.kill("SIGINT");
     }
   };
-  // handler for SIGTERM
 
   /* c8 ignore start */
   const sigtermHandler = () => {
     if (commandProcess) {
-      commandProcess.kill("SIGTERM"); // Send SIGTEM to the command process
+      commandProcess.kill("SIGTERM");
     }
   };
 
-  const handleOtherSignal = (signal) => {};
+  const handleOtherSignal = (signal: string) => {};
   /* c8 ignore stop */
 
   try {
-    // ensure the first command is expanded
-    try {
-      commandArgs[0] = path.resolve(which.sync(`${commandArgs[0]}`));
-    } catch (e) {
-      console.error(
-        `could not expand process command. using [${commandArgs.join(" ")}]`,
-      );
-    }
-
-    // expand any other commands that follow a --
-    let expandNext = false;
-    for (let i = 0; i < commandArgs.length; i++) {
-      if (commandArgs[i] === "--") {
-        expandNext = true;
-      } else if (expandNext) {
-        try {
-          commandArgs[i] = path.resolve(which.sync(`${commandArgs[i]}`));
-        } catch (e) {
-          console.error(
-            `could not expand process command. using [${commandArgs.join(" ")}]`,
-          );
-        }
-        expandNext = false;
+    if (useShell) {
+      commandProcess = execa(commandArgs.join(" "), {
+        shell: true,
+        stdio: "inherit",
+        env: { ...process.env, ...env },
+      });
+    } else {
+      try {
+        commandArgs[0] = path.resolve(which.sync(`${commandArgs[0]}`));
+      } catch (e) {
+        console.error(
+          `could not expand process command. using [${commandArgs.join(" ")}]`,
+        );
       }
-    }
 
-    commandProcess = execa(commandArgs[0], commandArgs.slice(1), {
-      stdio: "inherit",
-      env: { ...process.env, ...env },
-    });
+      commandProcess = execa(commandArgs[0], commandArgs.slice(1), {
+        stdio: "inherit",
+        env: { ...process.env, ...env },
+      });
+    }
 
     process.on("SIGINT", sigintHandler);
     process.on("SIGTERM", sigtermHandler);
@@ -84,30 +77,25 @@ async function executeCommand(
       process.on(signal, () => handleOtherSignal(signal));
     });
 
-    // Wait for the command process to finish
     const { exitCode } = await commandProcess;
 
     if (exitCode !== 0) {
       throw new Error(`Command exited with exit code ${exitCode}`);
     }
-  } catch (error) {
-    // no color on these errors as they can be standard errors for things like jest exiting with exitCode 1 for a single failed test.
+  } catch (error: any) {
     if (error.signal !== "SIGINT" && error.signal !== "SIGTERM") {
       if (error.code === "ENOENT") {
         console.error(`Unknown command: ${error.command}`);
-      } else if (error.message.includes("Command failed with exit code 1")) {
+      } else if (error.message?.includes("Command failed with exit code 1")) {
         console.error(`Command exited with exit code 1: ${error.command}`);
       } else {
         console.error(error.message);
       }
     }
 
-    // Exit with the error code from the command process, or 1 if unavailable
     process.exit(error.exitCode || 1);
   } finally {
-    // Clean up: Remove the SIGINT handler
     process.removeListener("SIGINT", sigintHandler);
-    // Clean up: Remove the SIGTERM handler
     process.removeListener("SIGTERM", sigtermHandler);
   }
 }
@@ -141,6 +129,7 @@ yargs(process.argv.slice(2))
   .command(
     "in <cmd..>",
     "🪄  Injects secrets into process and runs a command",
+    // @ts-expect-error yargs types mismatch in v17
     (yargs) => {
       yargs.positional("cmd", {
         describe: "The command to run after injecting secrets",
