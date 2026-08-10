@@ -8,7 +8,7 @@ export default defineConfig([
       "./src/vault/index.ts",
       "./src/vault/cli.ts",
     ],
-    platform: "neutral",
+    platform: "node",
     dts: true,
   },
 ]);
