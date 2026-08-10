@@ -1,23 +1,48 @@
-# tsdown-starter
+# @subq/tools
 
-A starter for creating a TypeScript package.
+Набор утилит для работы с внешними сервисами в проектах **SubQuery**.
 
-## Development
+## Модули
 
-- Install dependencies:
+| Модуль                                      | Описание                                                        |
+| ------------------------------------------- | --------------------------------------------------------------- |
+| [📊 `analytics`](./src/analytics/README.md) | Отправка аналитических событий в Яндекс.Метрику                 |
+| [🔐 `vault`](./src/vault/README.md)         | Работа с HashiCorp Vault — чтение секретов и инжект в окружение |
 
-```bash
-npm install
-```
-
-- Run the unit tests:
-
-```bash
-npm run test
-```
-
-- Build the library:
+## Установка
 
 ```bash
-npm run build
+npm install @subq/tools
+# или
+pnpm add @subq/tools
 ```
+
+## Разработка
+
+- Установить зависимости:
+
+```bash
+pnpm install
+```
+
+- Запустить тесты:
+
+```bash
+pnpm test
+```
+
+- Сборка:
+
+```bash
+pnpm build
+```
+
+- Проверка типов:
+
+```bash
+pnpm typecheck
+```
+
+## Лицензия
+
+MIT
