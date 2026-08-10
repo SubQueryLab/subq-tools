@@ -1,5 +1,7 @@
 import fs from "fs";
 import path from "path";
+
+import "dotenv/config";
 import yaml from "yaml";
 import c from "chalk";
 
@@ -7,7 +9,9 @@ import type { Config, Scope } from "./types.js";
 
 const dir = path.resolve();
 
-export function getConfig(configFile = "secrets.config.yaml"): Config | never {
+export function getYamlConfig(
+  configFile = "secrets.config.yaml",
+): Config | never {
   let config;
   try {
     config = fs.readFileSync(path.join(dir, configFile), "utf8");
@@ -96,7 +100,7 @@ export function parseConnectionString(
     process.exit(1);
   }
 
-  const host = `${url.protocol}//${url.host}`;
+  const host = `${url.protocol}//${url.host}/v1`;
   const username = decodeURIComponent(url.username);
   const password = decodeURIComponent(url.password);
   const scopes: Record<string, Scope> = {};
@@ -147,5 +151,10 @@ export function getConfigWithFallback(
   if (connectionString) {
     return parseConnectionString(connectionString);
   }
-  return getConfig(configFile);
+  console.warn(
+    c.yellow(
+      "VAULT_SECRETS_URL not found. Trying to read the old-one secrets.config.yaml",
+    ),
+  );
+  return getYamlConfig(configFile);
 }
