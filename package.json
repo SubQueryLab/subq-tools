@@ -33,7 +33,8 @@
     "dev": "tsdown --watch",
     "release": "pnpm build && bumpp && npm publish",
     "test": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:inject": "tsx ./src/vault/cli.ts in \"tsx ./src/vault/test.ts && tsx ./src/vault/test.ts\""
   },
   "dependencies": {
     "chalk": "^6.0.0",

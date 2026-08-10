@@ -12,7 +12,7 @@ import { Vault } from "./index.js";
 // FROM https://github.com/dotenvx/dotenvx/blob/main/src/lib/helpers/executeCommand.js
 const SHELL_OPERATORS = ["&&", "||", "|", ";", ">", ">>", "<", "<<"];
 
-async function executeCommand(
+export async function executeCommand(
   commandArgs: string[],
   env: Record<string, string>,
 ) {
@@ -29,7 +29,9 @@ async function executeCommand(
     "SIGUSR2",
   ];
 
-  const useShell = commandArgs.some((arg) => SHELL_OPERATORS.includes(arg));
+  const useShell = commandArgs.some((arg) =>
+    arg.split(/\s+/).some((token) => SHELL_OPERATORS.includes(token)),
+  );
 
   let commandProcess: any;
   const sigintHandler = () => {
@@ -103,7 +105,7 @@ async function executeCommand(
 async function inject(argv: { cmd: string[] }) {
   const command = argv.cmd;
 
-  // console.log(command);
+  // console.log("commandArgs:", command);
   const vault = new Vault();
   await vault.init();
   const allScopes = await vault.getAll();
