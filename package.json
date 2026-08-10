@@ -1,6 +1,6 @@
 {
   "name": "@subq/tools",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "🛠️ SubQuery tools and utils",
   "type": "module",
   "license": "MIT",
@@ -36,7 +36,7 @@
     "dev": "tsdown --watch",
     "test": "vitest",
     "typecheck": "tsc --noEmit",
-    "release": "bumpp && npm publish"
+    "release": "pnpm build && bumpp && npm publish"
   },
   "dependencies": {
     "dotenv": "^17.4.2",
