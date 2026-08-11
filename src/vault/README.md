@@ -239,7 +239,7 @@ const config = getConfigWithFallback("custom.config.yaml");
 Модуль включает CLI-утилиту для инжекта секретов из Vault в дочерние процессы:
 
 ```bash
-npx sq-inject in <команда>
+npx sq-inject in "<команда>"
 ```
 
 Команда запускается с уже инжектированными секретами в `env`. Все дочерние процессы (включая цепочки `&&`, `||`, пайпы `|`) наследуют переменные окружения.
@@ -249,22 +249,21 @@ npx sq-inject in <команда>
 **Простая команда:**
 
 ```bash
-npx sq-inject in npx prisma generate
+npx sq-inject in "npx prisma generate"
+```
+
+**Скрипт в package.json:**
+```json
+{
+    "scripts": ""dev": "sq-inject in \"svelte-kit sync && npx prisma@7.1.0 generate && vite dev --port=8080 --host\"",
+}
 ```
 
 **Цепочка команд (`&&`, `||`):**
 
 ```bash
-npx sq-inject in npx prisma@7.1.0 generate && cross-env NODE_OPTIONS="--max-old-space-size=8192" NODE_ENV=dev vite dev --port=8080
+npx sq-inject in "npx prisma@7.1.0 generate && cross-env NODE_OPTIONS="--max-old-space-size=8192" NODE_ENV=dev vite dev --port=8080"
 ```
-
-**Пайп:**
-
-```bash
-npx sq-inject in cat .env | grep API_KEY
-```
-
-> При наличии shell-операторов (`&&`, `||`, `|`, `;`, `>`, `>>`, `<`, `<<`) sq-inject автоматически запускает команду через системный shell, поэтому вся цепочка выполняется в едином окружении с секретами.
 
 ### Как это работает
 
