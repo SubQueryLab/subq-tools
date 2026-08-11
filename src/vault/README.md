@@ -255,7 +255,9 @@ npx sq-inject in "npx prisma generate"
 **Скрипт в package.json:**
 ```json
 {
-    "scripts": ""dev": "sq-inject in \"svelte-kit sync && npx prisma@7.1.0 generate && vite dev --port=8080 --host\"",
+  "scripts": {
+    "dev": "sq-inject in \"svelte-kit sync && npx prisma@7.1.0 generate && vite dev --port=8080 --host\"",
+  }
 }
 ```
 
