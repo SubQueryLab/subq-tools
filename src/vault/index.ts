@@ -2,6 +2,12 @@ import VaultInstance from "hashi-vault-js";
 import { getConfigWithFallback } from "./parser.js";
 import c from "chalk";
 import type { Config } from "./types.js";
+import { applyRequestTtl, BASE_TTL, withRetry } from "./retry.js";
+
+// hashi-vault-js types every response as `Object`, these are the parts used here
+type ListResponse = { keys?: string[] };
+type ReadResponse = { data: Record<string, string> };
+type LoginResponse = { client_token: string };
 
 export class KV {
   kv: string;
@@ -22,19 +28,25 @@ export class KV {
   }
 
   async list(path = ""): Promise<string[]> {
-    const secrets = await this.vault
-      .listKVSecrets(this.token, path, this.kv)
-      .then((r) => r.keys)
-      // @ts-ignore
-      .catch(() => []);
-    return secrets;
+    const secrets = await withRetry<ListResponse>(
+      { label: `vault.listKVSecrets(${this.kv}/${path})` },
+      (ttl) => {
+        applyRequestTtl(this.vault, ttl);
+        return this.vault.listKVSecrets(this.token, path, this.kv) as PromiseLike<ListResponse>;
+      },
+    ).catch(() => undefined);
+    return secrets?.keys ?? [];
   }
 
   async read(name: string) {
-    const secrets = await this.vault
-      .readKVSecret(this.token, name, undefined, this.kv)
-      .then((r) => r.data);
-    return secrets;
+    const secrets = await withRetry<ReadResponse>(
+      { label: `vault.readKVSecret(${this.kv}/${name})` },
+      (ttl) => {
+        applyRequestTtl(this.vault, ttl);
+        return this.vault.readKVSecret(this.token, name, undefined, this.kv) as PromiseLike<ReadResponse>;
+      },
+    );
+    return secrets.data;
   }
   async create(name: string, obj: Record<string, unknown>) {
     const status = await this.vault
@@ -71,13 +83,20 @@ export class Vault {
     const vault = new VaultInstance({
       https: false,
       baseUrl,
-      timeout: 10000,
+      timeout: BASE_TTL,
     });
 
-    const token: string = await vault
-      .loginWithUserpass(this.config.auth.username, this.config.auth.password)
+    const token: string = await withRetry<LoginResponse>(
+      { label: "vault.loginWithUserpass" },
+      (ttl) => {
+        applyRequestTtl(vault, ttl);
+        return vault.loginWithUserpass(
+          this.config.auth.username,
+          this.config.auth.password,
+        ) as PromiseLike<LoginResponse>;
+      },
+    )
       .then(({ client_token }) => client_token)
-      // @ts-ignore
       .catch((e) => {
         console.error(c.red("Error logging in to Vault"));
         console.error(c.red(e));
@@ -97,11 +116,15 @@ export class Vault {
       );
     }
     setInterval(async () => {
-      const res = await this.connection!.renewSelfToken(this.token!, "1d")
-        // @ts-ignore
-        .catch((e) =>
-          console.error(new Date(), "Error during token renewal:", e),
-        );
+      const res = await withRetry(
+        { label: "vault.renewSelfToken" },
+        (ttl) => {
+          applyRequestTtl(this.connection!, ttl);
+          return this.connection!.renewSelfToken(this.token!, "1d");
+        },
+      ).catch((e) =>
+        console.error(new Date(), "Error during token renewal:", e),
+      );
       if (res) {
         console.info(new Date(), "Successfully renewed Vault token");
       }
