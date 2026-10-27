@@ -6,7 +6,6 @@ import path from "path";
 import { pathToFileURL } from "url";
 import {
   execa,
-  parseCommandString,
   type ResultPromise,
   type StdoutStderrOption,
 } from "execa";
@@ -30,11 +29,59 @@ type Step = {
   pipeline: Command[];
 };
 
+// `parseCommandString` from execa splits on unescaped spaces only and keeps quotes,
+// so `"a && b"` in a quoted argument would leak as an operator — split with quoting here
+function splitCommandLine(input: string): string[] {
+  const tokens: string[] = [];
+  let current = "";
+  let started = false;
+
+  for (let index = 0; index < input.length; index += 1) {
+    const char = input[index];
+
+    if (/\s/.test(char)) {
+      if (started) {
+        tokens.push(current);
+        current = "";
+        started = false;
+      }
+      continue;
+    }
+
+    if (char === "\\" && input[index + 1] === " ") {
+      current += " ";
+      started = true;
+      index += 1;
+      continue;
+    }
+
+    if (char === '"' || char === "'") {
+      started = true;
+      index += 1;
+      while (index < input.length && input[index] !== char) {
+        current += input[index];
+        index += 1;
+      }
+      if (index >= input.length) {
+        throw new Error(`Missing closing ${char} in command: ${input}`);
+      }
+      continue;
+    }
+
+    current += char;
+    started = true;
+  }
+
+  if (started) {
+    tokens.push(current);
+  }
+  return tokens;
+}
+
 function tokenize(commandArgs: string[]): string[] {
   if (commandArgs.length === 1) {
-    // one quoted string (`sq-inject in "npm run dev"`) is parsed like a command line,
-    // the way the old `shell: true` branch did
-    return parseCommandString(commandArgs[0]);
+    // one quoted string (`sq-inject in "npm run dev"`) is parsed like a command line
+    return splitCommandLine(commandArgs[0]);
   }
 
   const tokens: string[] = [];
@@ -42,7 +89,7 @@ function tokenize(commandArgs: string[]): string[] {
     const parts = arg
       .split(/\s+/)
       .some((token) => CONTROL_TOKENS.has(token))
-      ? parseCommandString(arg)
+      ? splitCommandLine(arg)
       : [arg];
     tokens.push(...parts);
   }

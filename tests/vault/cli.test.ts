@@ -131,6 +131,27 @@ describe("executeCommand", () => {
     exit.mockRestore();
   });
 
+  test("keeps quoted spaces inside one argument", async () => {
+    await executeCommand(['node script.js --name "my file"'], {});
+
+    expect(mocks.execa).toHaveBeenCalledWith(
+      "node",
+      ["script.js", "--name", "my file"],
+      expect.any(Object),
+    );
+  });
+
+  test("does not treat an operator inside quotes as a chain separator", async () => {
+    await executeCommand(['git commit -m "fix: a && b"'], {});
+
+    expect(mocks.execa).toHaveBeenCalledTimes(1);
+    expect(mocks.execa).toHaveBeenCalledWith(
+      "git",
+      ["commit", "-m", "fix: a && b"],
+      expect.any(Object),
+    );
+  });
+
   test("rejects heredocs instead of falling back to a shell", async () => {
     const exit = vi
       .spyOn(process, "exit")
