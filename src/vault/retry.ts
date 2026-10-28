@@ -1,5 +1,6 @@
 import type VaultInstance from "hashi-vault-js";
 import c from "chalk";
+import { spinner } from "./spinner.js";
 
 /** Request ttl of the first attempt. Grows linearly with every retry. */
 export const BASE_TTL = 15_000;
@@ -39,9 +40,20 @@ export function applyRequestTtl(vault: VaultInstance, ttl: number) {
   instance.defaults.timeout = ttl;
 }
 
+/** ora owns the line it animates, so anything that must stay on screen is printed with the spinner paused. */
+function printOverSpinner(stream: "info" | "error", line: string) {
+  const spinning = spinner.isSpinning;
+  spinner.stop();
+  console[stream](line);
+  if (spinning) {
+    spinner.start();
+  }
+}
+
 /**
  * Runs `request` up to `attempts` times, growing the request ttl and the pause
- * between attempts. Every attempt is logged, the last error is rethrown.
+ * between attempts. The wait is animated on the shared spinner, deviations are
+ * printed as lines, and the last error is rethrown.
  */
 export async function withRetry<T>(
   { label, attempts = ATTEMPTS, ttl = BASE_TTL, delay = BASE_DELAY }: RetryOptions,
@@ -53,28 +65,33 @@ export async function withRetry<T>(
     const requestTtl = ttlForAttempt(attempt, ttl);
     const pause = delayForAttempt(attempt, delay);
 
-    if (pause) {
-      console.warn(c.yellow(`⏳ ${label}: retrying in ${inSeconds(pause)}`));
+    // the first attempt is the happy path — announcing it only adds noise to every run
+    if (attempt > 1) {
+      const state = `${label}: retry ${attempt}/${attempts} in ${inSeconds(pause)}, ttl ${inSeconds(requestTtl)}`;
+      // outside the CLI nobody owns a spinner, and a retry that leaves no trace at all
+      // would look like a hang — so there it degrades to a plain line
+      if (spinner.isSpinning) {
+        spinner.text = c.yellow(state);
+      } else {
+        console.warn(c.yellow(`⏳ ${state}`));
+      }
+
       await sleep(pause);
     }
-
-    console.info(
-      c.blueBright(
-        `🔁 ${label}: attempt ${attempt}/${attempts}, ttl ${inSeconds(requestTtl)}`,
-      ),
-    );
 
     try {
       const result = await request(requestTtl);
       if (attempt > 1) {
-        console.info(
+        printOverSpinner(
+          "info",
           c.green(`✅ ${label}: succeeded on attempt ${attempt}/${attempts}`),
         );
       }
       return result;
     } catch (e) {
       error = e;
-      console.error(
+      printOverSpinner(
+        "error",
         c.redBright(
           `❌ ${label}: attempt ${attempt}/${attempts} failed: ${reason(e)}`,
         ),

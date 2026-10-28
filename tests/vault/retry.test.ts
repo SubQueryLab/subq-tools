@@ -12,6 +12,23 @@ import {
 } from "../../src/vault/retry";
 import { KV } from "../../src/vault";
 
+// `src/vault/spinner.ts` creates its instance at import time, so ora is replaced
+// wholesale. The fake keeps no state of its own — tests set `isSpinning` themselves.
+const oraMock = vi.hoisted(() => ({
+  spinner: {
+    isSpinning: false,
+    text: "",
+    start: vi.fn(),
+    stop: vi.fn(),
+    succeed: vi.fn(),
+    fail: vi.fn(),
+  },
+}));
+
+vi.mock("ora", () => ({ default: () => oraMock.spinner }));
+
+const { spinner } = oraMock;
+
 const attempts = [1, 2, 3, 4, 5];
 
 function createFakeVault(failures: number) {
@@ -72,6 +89,9 @@ describe("withRetry", () => {
     vi.spyOn(console, "info").mockImplementation(() => {});
     vi.spyOn(console, "warn").mockImplementation(() => {});
     vi.spyOn(console, "error").mockImplementation(() => {});
+    spinner.isSpinning = false;
+    spinner.text = "";
+    vi.clearAllMocks();
   });
 
   afterEach(() => {
@@ -86,6 +106,10 @@ describe("withRetry", () => {
       withRetry({ label: "test", ttl: 100, delay: 1 }, request),
     ).resolves.toBe("ok");
     expect(request).toHaveBeenCalledTimes(1);
+    // the happy path leaves no trace: no line, and the stage text untouched
+    expect(console.info).not.toHaveBeenCalled();
+    expect(console.warn).not.toHaveBeenCalled();
+    expect(spinner.text).toBe("");
   });
 
   test("passes a growing ttl to every attempt", async () => {
@@ -102,25 +126,49 @@ describe("withRetry", () => {
     expect(ttls).toEqual([100, 200, 300]);
   });
 
-  test("logs every attempt", async () => {
+  test("animates the retry wait on the shared spinner", async () => {
+    spinner.isSpinning = true;
+    let calls = 0;
     const request = vi.fn(async () => {
-      throw new Error("down");
+      calls += 1;
+      if (calls === 1) throw new Error("down");
+      return "ok";
     });
 
     await expect(
       withRetry({ label: "vault.test", attempts: 2, ttl: 100, delay: 1 }, request),
-    ).rejects.toThrow("down");
+    ).resolves.toBe("ok");
 
-    const logs = vi
-      .mocked(console.info)
-      .mock.calls.flat()
-      .map(String)
-      .join("\n");
-    expect(logs).toContain("vault.test: attempt 1/2, ttl 0.1s");
-    expect(logs).toContain("vault.test: attempt 2/2, ttl 0.2s");
+    expect(spinner.text).toContain("vault.test: retry 2/2");
+    expect(spinner.text).toContain("ttl 0.2s");
+    // while the spinner owns the line, the retry itself prints nothing
+    expect(console.warn).not.toHaveBeenCalled();
+    // a failed attempt is a deviation, so it is printed with the spinner paused around it
     expect(console.error).toHaveBeenCalledWith(
-      expect.stringContaining("vault.test: attempt 2/2 failed: down"),
+      expect.stringContaining("vault.test: attempt 1/2 failed: down"),
     );
+    expect(spinner.stop).toHaveBeenCalled();
+    expect(spinner.start).toHaveBeenCalled();
+  });
+
+  test("falls back to a line when no spinner is running", async () => {
+    let calls = 0;
+    const request = vi.fn(async () => {
+      calls += 1;
+      if (calls === 1) throw new Error("down");
+      return "ok";
+    });
+
+    await expect(
+      withRetry({ label: "vault.test", attempts: 2, ttl: 100, delay: 1 }, request),
+    ).resolves.toBe("ok");
+
+    expect(console.warn).toHaveBeenCalledWith(
+      expect.stringContaining("vault.test: retry 2/2"),
+    );
+    expect(spinner.text).toBe("");
+    // a spinner nobody started must not be resurrected and left running
+    expect(spinner.start).not.toHaveBeenCalled();
   });
 
   test("throws the last error once all attempts are exhausted", async () => {
@@ -140,6 +188,8 @@ describe("KV reads", () => {
     vi.spyOn(console, "info").mockImplementation(() => {});
     vi.spyOn(console, "warn").mockImplementation(() => {});
     vi.spyOn(console, "error").mockImplementation(() => {});
+    spinner.isSpinning = false;
+    spinner.text = "";
     vi.useFakeTimers();
   });
 

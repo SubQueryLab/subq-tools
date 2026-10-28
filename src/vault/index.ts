@@ -3,6 +3,7 @@ import { getConfigWithFallback } from "./parser.js";
 import c from "chalk";
 import type { Config } from "./types.js";
 import { applyRequestTtl, BASE_TTL, withRetry } from "./retry.js";
+import { spinner } from "./spinner.js";
 
 // hashi-vault-js types every response as `Object`, these are the parts used here
 type ListResponse = { keys?: string[] };
@@ -76,9 +77,7 @@ export class Vault {
   }
 
   async init() {
-    console.info(
-      c.blueBright("🔐 Initializing connection to Vault:", this.config.host),
-    );
+    spinner.start(c.blueBright(`Connecting to Vault ${this.config.host}`));
     const baseUrl =  this.config.host.endsWith('/v1') ? this.config.host : new URL('/v1', this.config.host).href
     const vault = new VaultInstance({
       https: false,
@@ -98,12 +97,10 @@ export class Vault {
     )
       .then(({ client_token }) => client_token)
       .catch((e) => {
-        console.error(c.red("Error logging in to Vault"));
+        spinner.fail(c.red("Error logging in to Vault"));
         console.error(c.red(e));
         process.exit(1);
       });
-
-    console.info(c.blueBright("🔑 Gotcha access token"));
 
     this.connection = vault;
     this.token = token;
@@ -143,9 +140,12 @@ export class Vault {
   async getAll() {
     const scopedEnv: Record<string, Record<string, string>> = {};
     for (const [name, scope] of Object.entries(this.config.scopes)) {
+      spinner.start(
+        c.blueBright(`Reading scope ${name} (${scope.kv}/${scope.path})`),
+      );
       const kv = this.getKV(scope.kv);
       const env = await kv.read(scope.path!).catch(() => {
-        console.error(c.redBright(`❌ Can't read secret scope: ${name}`));
+        spinner.fail(c.redBright(`Can't read secret scope: ${name}`));
       });
 
       if (!env) continue;

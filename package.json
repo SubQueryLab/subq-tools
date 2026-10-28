@@ -1,6 +1,6 @@
 {
   "name": "@subq/tools",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "description": "🛠️ SubQuery tools and utils",
   "homepage": "https://github.com/SubQueryLab/subq-tools#readme",
   "bugs": {
@@ -41,6 +41,7 @@
     "chalk": "^6.0.0",
     "dotenv": "^17.4.2",
     "hashi-vault-js": "^0.5.2",
+    "ora": "^9.4.1",
     "yaml": "^2.9.0"
   },
   "devDependencies": {

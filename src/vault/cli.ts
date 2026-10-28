@@ -12,6 +12,8 @@ import {
 } from "execa";
 
 import { Vault } from "./index.js";
+import { printBanner } from "./banner.js";
+import { spinner } from "./spinner.js";
 
 // The `shell` option hands the whole command line to cmd.exe/sh — the classic
 // injection path, so execa docs advise against it. We interpret the operators
@@ -293,6 +295,8 @@ export async function executeCommand(
 async function inject(argv: { cmd: string[] }) {
   const command = argv.cmd;
 
+  printBanner();
+
   // console.log("commandArgs:", command);
   const vault = new Vault();
   await vault.init();
@@ -302,9 +306,9 @@ async function inject(argv: { cmd: string[] }) {
     secrets = { ...secrets, ...scope };
   }
 
-  console.info(
+  spinner.succeed(
     c.blueBright(
-      `✅ Injected secrets from scopes ${Object.keys(allScopes)
+      `Injected secrets from scopes ${Object.keys(allScopes)
         .map((s) => c.bold(s))
         .join(", ")}`,
     ),
