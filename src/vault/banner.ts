@@ -36,6 +36,8 @@ const TOOLS = [
 const SQ_WIDTH = 17;
 const SLASH_WIDTH = 7;
 
+/** Explicit hex rather than chalk's `white` — terminals render that one grey. */
+const SQ_COLOR = "#ffffff";
 /** SubQuery brand lime. */
 const BRAND = "#bce613";
 
@@ -43,7 +45,7 @@ const BRAND = "#bce613";
 export function printBanner() {
   const lines = SQ.map(
     (glyph, index) =>
-      c.white(glyph.padEnd(SQ_WIDTH)) +
+      c.hex(SQ_COLOR)(glyph.padEnd(SQ_WIDTH)) +
       c.hex(BRAND)(SLASH[index].padEnd(SLASH_WIDTH)) +
       c.dim(TOOLS[index]),
   );
