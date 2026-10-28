@@ -1,6 +1,6 @@
 {
   "name": "@subq/tools",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "🛠️ SubQuery tools and utils",
   "homepage": "https://github.com/SubQueryLab/subq-tools#readme",
   "bugs": {
@@ -34,7 +34,8 @@
     "release": "pnpm build && bumpp && npm publish",
     "test": "vitest",
     "typecheck": "tsc --noEmit",
-    "test:inject": "tsx ./src/vault/cli.ts in \"tsx ./src/vault/test.ts && tsx ./src/vault/test.ts\""
+    "test:inject": "tsx ./src/vault/cli.ts in \"tsx ./src/vault/test.ts && tsx ./src/vault/test.ts\"",
+    "test:inject_built": "node ./dist/vault/cli.js in \"tsx ./src/vault/test.ts && tsx ./src/vault/test.ts\""
   },
   "dependencies": {
     "chalk": "^6.0.0",

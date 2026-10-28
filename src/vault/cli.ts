@@ -3,7 +3,8 @@
 import yargs from "yargs";
 import c from "chalk";
 import path from "path";
-import { pathToFileURL } from "url";
+import { realpathSync } from "fs";
+import { fileURLToPath } from "url";
 import {
   execa,
   type ResultPromise,
@@ -312,13 +313,30 @@ async function inject(argv: { cmd: string[] }) {
   await executeCommand(command, secrets);
 }
 
-// the module is imported by tests too — run the CLI only when invoked as a script
-const invokedAsScript =
-  process.argv[1] !== undefined &&
-  import.meta.url.toLowerCase() ===
-    pathToFileURL(path.resolve(process.argv[1])).href.toLowerCase();
+// Node resolves the entry module to its real path, while `process.argv[1]` keeps the path
+// as typed. Behind a symlinked bin (pnpm's `node_modules` junctions, `npm link`) the two
+// differ, so both sides go through the same realpath before being compared.
+const realpath = (file: string) => realpathSync.native(path.resolve(file));
 
-if (invokedAsScript) {
+/** `true` when this module is the process entry point rather than an import. */
+export function isInvokedAsScript(
+  entry: string | undefined = process.argv[1],
+  modulePath: string = fileURLToPath(import.meta.url),
+): boolean {
+  if (entry === undefined) {
+    return false;
+  }
+
+  try {
+    return realpath(entry) === realpath(modulePath);
+  } catch {
+    // a non-existent entry (`node -e`, stdin) is never this module
+    return false;
+  }
+}
+
+// the module is imported by tests too — run the CLI only when invoked as a script
+if (isInvokedAsScript()) {
   yargs(process.argv.slice(2))
     .scriptName("sq-inject")
     .parserConfiguration({ "unknown-options-as-args": true })

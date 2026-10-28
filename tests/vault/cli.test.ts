@@ -1,5 +1,8 @@
-import { describe, test, expect, vi, beforeEach } from "vitest";
-import { executeCommand } from "../../src/vault/cli";
+import { describe, test, expect, vi, beforeEach, beforeAll, afterAll } from "vitest";
+import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, rmSync } from "fs";
+import { tmpdir } from "os";
+import path from "path";
+import { executeCommand, isInvokedAsScript } from "../../src/vault/cli";
 
 const mocks = vi.hoisted(() => ({ execa: vi.fn() }));
 
@@ -162,5 +165,45 @@ describe("executeCommand", () => {
     expect(mocks.execa).not.toHaveBeenCalled();
     expect(exit).toHaveBeenCalledWith(1);
     exit.mockRestore();
+  });
+});
+
+describe("isInvokedAsScript", () => {
+  // mirrors how pnpm links a package: a directory symlink to the real one, reached by path
+  const root = mkdtempSync(path.join(tmpdir(), "sq-inject-"));
+  const real = path.join(root, "package");
+  const linked = path.join(root, "node_modules");
+
+  beforeAll(() => {
+    mkdirSync(real);
+    writeFileSync(path.join(real, "cli.js"), "");
+    writeFileSync(path.join(real, "other.js"), "");
+    symlinkSync(real, linked, process.platform === "win32" ? "junction" : "dir");
+  });
+
+  afterAll(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  const cli = path.join(real, "cli.js");
+
+  test("recognises the entry reached through a symlink", () => {
+    expect(isInvokedAsScript(path.join(linked, "cli.js"), cli)).toBe(true);
+  });
+
+  test("recognises the entry given as a relative path", () => {
+    expect(isInvokedAsScript(path.relative(process.cwd(), cli), cli)).toBe(true);
+  });
+
+  test("returns false for a different file behind the same symlink", () => {
+    expect(isInvokedAsScript(path.join(linked, "other.js"), cli)).toBe(false);
+  });
+
+  test("returns false for an entry that does not exist", () => {
+    expect(isInvokedAsScript(path.join(linked, "missing.js"), cli)).toBe(false);
+  });
+
+  test("returns false when the process has no entry file", () => {
+    expect(isInvokedAsScript(undefined, cli)).toBe(false);
   });
 });
