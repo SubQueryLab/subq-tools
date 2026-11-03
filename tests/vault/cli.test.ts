@@ -35,7 +35,6 @@ describe("executeCommand", () => {
 
     expect(mocks.execa).toHaveBeenCalledWith("node", ["script.js"], {
       env: { TEST_KEY: "test_value" },
-      preferLocal: true,
       stdin: "inherit",
       stdout: "inherit",
       stderr: "inherit",

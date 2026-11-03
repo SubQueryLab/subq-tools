@@ -184,11 +184,15 @@ async function runPipeline(
     // feeding the previous stdout *stream* into the `stdin` option deadlocks both
     // subprocess promises, so connect the pair with an explicit .pipe() instead
     const source = pipeSource !== undefined && !command.stdinFile ? pipeSource : undefined;
+    // Deliberately no `preferLocal`: it rewrites PATH via `npm-run-path`, which
+    // hoists ancestor `node_modules/.bin` dirs ahead of this project's own when
+    // the project's `.bin` is already on PATH (the `pnpm`/`npm` script case). A
+    // parent workspace's binary (e.g. a newer `vite`) then shadows the local one.
+    // pnpm/npm scripts already put the local `.bin` first, and execa resolves
+    // `.cmd` shims itself, so the inherited PATH is the source of truth.
     const subprocess = execa(command.file, command.args, {
       // execa extends `process.env` by default, so only the injected secrets go here
       env,
-      // replaces the old `which.sync()` pre-pass: resolves local node_modules/.bin and .cmd shims
-      preferLocal: true,
       stdin: command.stdinFile ? { file: command.stdinFile } : source ? "pipe" : "inherit",
       stdout,
       stderr: "inherit",
