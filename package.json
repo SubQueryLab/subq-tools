@@ -1,6 +1,6 @@
 {
   "name": "@subq/tools",
-  "version": "0.1.13",
+  "version": "0.1.14",
   "description": "🛠️ SubQuery tools and utils",
   "homepage": "https://github.com/SubQueryLab/subq-tools#readme",
   "bugs": {
@@ -31,11 +31,12 @@
   "scripts": {
     "build": "tsdown",
     "dev": "tsdown --watch",
+    "test:vite": "vite -v",
     "release": "pnpm build && bumpp && npm publish",
     "test": "vitest",
     "typecheck": "tsc --noEmit",
     "test:inject": "tsx ./src/vault/cli.ts in \"tsx ./src/vault/test.ts && tsx ./src/vault/test.ts\"",
-    "test:inject_built": "node ./dist/vault/cli.js in \"tsx ./src/vault/test.ts && tsx ./src/vault/test.ts\""
+    "test:inject_vite": "node ./dist/vault/cli.js in \"vite -v\""
   },
   "dependencies": {
     "chalk": "^6.0.0",
@@ -46,15 +47,12 @@
   },
   "devDependencies": {
     "@types/node": "^22.15.17",
-    "@types/which": "^3.0.4",
-    "@types/yargs": "^17.0.35",
     "bumpp": "^10.1.0",
     "execa": "^10.2.1",
     "tsdown": "^0.11.9",
     "typescript": "^5.8.3",
     "vitest": "^3.1.3",
-    "which": "^7.0.0",
-    "yargs": "^18.1.0"
+    "vite": "^5.4.21"
   },
   "publishConfig": {
     "access": "public"
