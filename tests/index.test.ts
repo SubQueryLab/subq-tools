@@ -1,6 +1,7 @@
 import { expect, test } from 'vitest'
-import { myFunction } from '../src'
+import { analytics, vault } from '../src'
 
-test('myFunction', () => {
-  expect(myFunction()).toBe('Hello, world!')
+test('exports analytics and vault namespaces', () => {
+  expect(analytics).toBeTruthy()
+  expect(vault).toBeTruthy()
 })

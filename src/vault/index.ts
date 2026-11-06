@@ -58,7 +58,7 @@ export class KV {
   async update(
     name: string,
     obj: Record<string, unknown>,
-    version = undefined,
+    version: number = 0,
   ) {
     const status = await this.vault
       .updateKVSecret(this.token, name, obj, version, this.kv)

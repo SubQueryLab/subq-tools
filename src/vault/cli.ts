@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 
-import yargs from "yargs";
 import c from "chalk";
 import path from "path";
 import { realpathSync } from "fs";
@@ -343,26 +342,32 @@ export function isInvokedAsScript(
   }
 }
 
+const HELP = `🪄  Injects secrets into process and runs a command
+
+Usage:
+  sq-inject in <cmd..>
+
+Options:
+  -h, --help  Show help
+`;
+
 // the module is imported by tests too — run the CLI only when invoked as a script
 if (isInvokedAsScript()) {
-  yargs(process.argv.slice(2))
-    .scriptName("sq-inject")
-    .parserConfiguration({ "unknown-options-as-args": true })
-    .command(
-      "in <cmd..>",
-      "🪄  Injects secrets into process and runs a command",
-      // @ts-expect-error yargs types mismatch in v17
-      (yargs) => {
-        yargs.positional("cmd", {
-          describe: "The command to run after injecting secrets",
-          type: "string",
-        });
-      },
-      inject,
-    )
-    .demandCommand(1, 1, 'use command "in" to start process with injection')
-    .help("h")
-    .alias("h", "help")
-    .strict()
-    .parse();
+  // yargs (and its cliui/yargs-parser subtree) was dropped: the CLI is a single
+  // fixed command, so a hand-rolled parser keeps the bin free of that bloat. All
+  // tokens after `in` are passed through verbatim, incl. `--`-prefixed flags.
+  const [command, ...cmd] = process.argv.slice(2);
+
+  if (command === "-h" || command === "--help") {
+    console.log(HELP);
+    process.exit(0);
+  }
+
+  if (command !== "in" || cmd.length === 0) {
+    console.error("Usage: sq-inject in <cmd..>");
+    console.error('use command "in" to start process with injection');
+    process.exit(1);
+  }
+
+  await inject({ cmd });
 }
