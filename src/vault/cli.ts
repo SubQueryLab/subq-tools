@@ -2,8 +2,9 @@
 
 import c from "chalk";
 import path from "path";
-import { realpathSync } from "fs";
+import { realpathSync, writeSync } from "fs";
 import { fileURLToPath } from "url";
+import { spawn } from "child_process";
 import {
   execa,
   type ResultPromise,
@@ -217,45 +218,92 @@ async function runPipeline(
   return last.status === "fulfilled" ? { ok: true } : { ok: false, error: last.reason };
 }
 
+// On Windows there are no real signals: `subprocess.kill("SIGINT")` is an abrupt
+// `TerminateProcess` of the direct child only. For a `.cmd` shim that kills the
+// outer `cmd.exe` while nested `cmd.exe`/node processes (e.g. `vite dev`) are
+// left showing "Terminate batch job (Y/N)?" and holding the console in whatever
+// raw mode they enabled. The console already broadcasts Ctrl+C to every process
+// attached to it, so the graceful part of the stop is that broadcast — after a
+// short grace `taskkill /T /F` clears whatever is still left in one shot.
+const WINDOWS_GRACE_MS = 1_000;
+
+function killTreeOnWindows(pid: number): void {
+  spawn("taskkill", ["/pid", String(pid), "/T", "/F"], {
+    windowsHide: true,
+    stdio: "ignore",
+  }).on("error", () => {});
+}
+
+// A child (vite's `setRawMode(true)`) can leave the shared console in raw mode
+// and with a hidden cursor when it is force-killed. Re-enable cooked input and
+// the cursor from here, on the parent's copy of the same console handle.
+function restoreTerminal(): void {
+  if (process.stdin.isTTY && typeof process.stdin.setRawMode === "function") {
+    try {
+      process.stdin.setRawMode(false);
+    } catch {
+      // stdin may not be in raw mode, or the handle may already be closed
+    }
+  }
+  if (process.stdout.isTTY) {
+    try {
+      writeSync(1, "\u001b[?25h");
+    } catch {}
+  }
+}
+
+function restoreTerminalAndExit(code: number): never {
+  restoreTerminal();
+  process.exit(code);
+}
+
 export async function executeCommand(
   commandArgs: string[],
   env: Record<string, string>,
 ) {
   const running = new Set<ResultPromise>();
-  const sigintHandler = () => {
+  const isWindows = process.platform === "win32";
+  let interrupted: "SIGINT" | "SIGTERM" | undefined;
+
+  const stopRunning = (signal: "SIGINT" | "SIGTERM") => {
+    // A second interrupt means the first grace period was not enough: kill now.
+    const forceNow = interrupted !== undefined;
+    interrupted = signal;
+
     for (const subprocess of running) {
-      subprocess.kill("SIGINT");
+      if (isWindows) {
+        // Do not `subprocess.kill(signal)` here: it is an abrupt `TerminateProcess`
+        // of the direct child only, which skips the child's own Ctrl+C cleanup and
+        // leaves `cmd.exe` shims anchored to their "Terminate batch job" prompt.
+        // The console already delivered the break to the whole process group, so
+        // we only clear what is still alive after the grace period.
+        const child = subprocess.nodeChildProcess;
+        const pid = child.pid;
+        if (pid === undefined) continue;
+
+        if (forceNow) {
+          killTreeOnWindows(pid);
+          continue;
+        }
+
+        const timer = setTimeout(() => {
+          // PID reuse is a hazard: only kill if the child is still running.
+          if (child.exitCode === null && child.signalCode === null) {
+            killTreeOnWindows(pid);
+          }
+        }, WINDOWS_GRACE_MS);
+        timer.unref();
+      } else {
+        subprocess.kill(signal);
+      }
     }
   };
 
-  /* c8 ignore start */
-  const sigtermHandler = () => {
-    for (const subprocess of running) {
-      subprocess.kill("SIGTERM");
-    }
-  };
-
-  const handleOtherSignal = (signal: string) => {};
-
-  const otherSignals = [
-    "SIGHUP",
-    "SIGQUIT",
-    "SIGILL",
-    "SIGTRAP",
-    "SIGABRT",
-    "SIGBUS",
-    "SIGFPE",
-    "SIGUSR1",
-    "SIGSEGV",
-    "SIGUSR2",
-  ];
-  /* c8 ignore stop */
+  const sigintHandler = () => stopRunning("SIGINT");
+  const sigtermHandler = () => stopRunning("SIGTERM");
 
   process.on("SIGINT", sigintHandler);
   process.on("SIGTERM", sigtermHandler);
-  otherSignals.forEach((signal) => {
-    process.on(signal, () => handleOtherSignal(signal));
-  });
 
   let ok = true;
   let failure: unknown;
@@ -267,6 +315,9 @@ export async function executeCommand(
     }
 
     for (const step of steps) {
+      if (interrupted !== undefined) {
+        throw { signal: interrupted };
+      }
       if (step.operator === "&&" && !ok) continue;
       if (step.operator === "||" && ok) continue;
       const result = await runPipeline(step.pipeline, env, running);
@@ -278,18 +329,31 @@ export async function executeCommand(
       throw failure;
     }
   } catch (error: any) {
-    if (error.signal !== "SIGINT" && error.signal !== "SIGTERM") {
-      if (error.code === "ENOENT") {
-        console.error(`Unknown command: ${error.command}`);
-      } else if (error.message?.includes("Command failed with exit code 1")) {
-        console.error(`Command exited with exit code 1: ${error.command}`);
-      } else {
-        console.error(error.message);
-      }
+    const signal = error.signal as string | undefined;
+
+    if (
+      interrupted !== undefined ||
+      signal === "SIGINT" ||
+      signal === "SIGTERM"
+    ) {
+      // Ctrl+C / termination: the child already handled the signal (or was
+      // cleared above), so exit quietly with the shell convention.
+      restoreTerminalAndExit(
+        interrupted === "SIGTERM" || signal === "SIGTERM" ? 143 : 130,
+      );
     }
 
-    process.exit(error.exitCode || 1);
+    if (error.code === "ENOENT") {
+      console.error(`Unknown command: ${error.command}`);
+    } else if (error.message?.includes("Command failed with exit code 1")) {
+      console.error(`Command exited with exit code 1: ${error.command}`);
+    } else {
+      console.error(error.message);
+    }
+
+    restoreTerminalAndExit(error.exitCode || 1);
   } finally {
+    restoreTerminal();
     process.removeListener("SIGINT", sigintHandler);
     process.removeListener("SIGTERM", sigtermHandler);
   }
